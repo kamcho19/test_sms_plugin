@@ -49,7 +49,7 @@ public class SmsPlugInTest {
 //        sp.send("", "Ipvision", "Ipvision", "Hello1, world", SmsOrigin.TEST, new TestSmsCallback());
 //      sp.send(toNumber, fromNr, fromName, text, origin, callback);
 
-		sp.closeSocket();
+		
 
 	}
 

@@ -46,7 +46,7 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
     private final static String MAX_LENGTH = "784";	
     private final static String MIN_LENGTH = "1";
     private final static String CUSTOMER_ID ="MITELEPO";
-	private final static int POLL_TIMEOUT =100000;//2500;
+	private final static int POLL_TIMEOUT =86400000;//2500;
 	private final static int SEND_TIMELIMIT = 10;//86400;	//1day second 1*24*60*60
 	private final static int REPLY_TIMELIMIT = 10;//86400;	//1day second 1*24*60*60
 	private final static int REQUEST_RETRIES = 3;
@@ -73,23 +73,11 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
     }
 
     public final void openSocket()
-    {
-    	/* ================= open zmq ======================*/
-    	System.out.println("#1. Trying to open a ZMQ socket");
-		ctx = new ZContext();        
-        client = ctx.createSocket(ZMQ.REQ);
-        assert (client != null); // true - countinue, false - stop and Assertion Error
-        client.connect(SERVER_ENDPOINT);
-        items =new PollItem[]{new PollItem(client, Poller.POLLIN)};
-//        		    
+    {	
+		ctx = new ZContext();
     }
 
-    public final void closeSocket()
-    {
-    	/* ================= close zmq ======================*/
-    	System.out.println("#3. close a ZMQ socket");    	
-    	ctx.destroy();	
-    }    
+        
   
     @Override
     public void start(BundleContext bundleContext) throws Exception {
@@ -101,9 +89,7 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
     }
 
     @Override
-    public void stop(BundleContext bundleContext) throws Exception {
-    	closeSocket();
-    	
+    public void stop(BundleContext bundleContext) throws Exception {	
     	serviceRegistration.unregister();       
     }
 
@@ -160,8 +146,11 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
     @SuppressWarnings({"ThrowFromFinallyBlock", "ConstantConditions"})
     @Override
     public void send(String toNumber, String fromNr, String fromName, String text, SmsOrigin origin, SmsCallback callback) {
-    	/* ================= make sms message ======================*/
-    	System.out.println("#2. send message throughout a ZMQ socket");    	
+    	/* ================= make sms message ======================*/    	
+        client = ctx.createSocket(ZMQ.REQ);
+        assert (client != null); // true - countinue, false - stop and Assertion Error
+        client.connect(SERVER_ENDPOINT);
+        items =new PollItem[]{new PollItem(client, Poller.POLLIN)};    	
     	//
     	JSONObject smsData = new JSONObject();
     	JSONObject smsObj = new JSONObject();
@@ -183,7 +172,6 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
         startSendTime = System.currentTimeMillis()/1000;    	        
         //
         int testCnt =0;
-        int retriesLeft = REQUEST_RETRIES;
         long diffTime = (System.currentTimeMillis()/1000) - startSendTime;        
         try{
 	        while(diffTime <SEND_TIMELIMIT && !Thread.currentThread().isInterrupted() )
@@ -191,7 +179,7 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 	        	//
 	        	testCnt ++;
 	        	System.out.println("======== "+testCnt+" times retry ========");
-	        	System.out.println("======== "+retriesLeft+" times remain ========");
+	        	
 	        	
 	    	    Boolean msgResult = client.send(msgData);
 	    	    
@@ -202,7 +190,6 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 		    	    int expect_reply = 1;
 		    	    while(expect_reply >0)
 		    	    {
-
 		                rc = ZMQ.poll(items, POLL_TIMEOUT); 
 		                
 		                if(rc == 0 || rc == -1)
@@ -210,6 +197,7 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 		                	// 0 : no connect
 		                	// -1 : occur error 
 		                	checkSmsException(ReasonCode.CONNECT_FAILED, "connect failed");
+		                	diffTime = (System.currentTimeMillis()/1000) - startSendTime;
 		                	break;
 		                }
 		                
@@ -217,16 +205,9 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 		                {
 		                	String sendRes = client.recvStr();
 		                	if(sendRes == null){
-//		                		retriesLeft --;
+		                		diffTime = (System.currentTimeMillis()/1000) - startSendTime;
 		                		break;
 		                	}
-		                	
-		                	
-		                	client.send(msgData);
-		                	System.out.println("222222rc===> "+rc);
-		                	rc = ZMQ.poll(items, POLL_TIMEOUT);
-		                	System.out.println("333333333rc===> "+rc);
-
 		                	
 		                	//success
 		                	//available reply               	 
@@ -330,11 +311,6 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 			            	    			
 			            	    		}
 			            	    		
-			            	    		
-			            	    		
-			            	    		
-			            	    		
-			            	    		
 			            	    	}else if(code.equals("0")){
 			            	    		// sending fail
 			            	    		System.out.println("======sending fail======");
@@ -386,75 +362,7 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 			            	    			/*SMS_ERR_TOO_MUCH_REQUEST = 2,   ///< too much requests.*/
 			            	    			reasonCode = ReasonCode.OTHER_ERROR;
 			            	    			break;		            	    			
-			            	    		/*	
-			            	    		case 3:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 4:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 10:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 11:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 12:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 13:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 14:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 15:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 16:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 17:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 20:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 21:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 22:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 23:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 30:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 31:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-			            	    			
-			            	    		case 32:
-			            	    			reasonCode = ReasonCode.INVALID_NUMBER;
-			            	    			break;
-		            	    		*/
+			            	    		
 		            	    		}
 		            	    		
 		            	    		checkSmsException(reasonCode, sysErr);
@@ -463,7 +371,7 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 		                		e.printStackTrace();
 		                	}
 		                	
-		                	retriesLeft =0;
+		                	diffTime = SEND_TIMELIMIT;
 		                	break;
 		                }
 		    	    }
@@ -479,12 +387,10 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 //        	callback.onFailure(exception);
         }  
 
-        
+        ctx.destroy();	
         callback.onSent();
         
     }
-    
-    
 
 	@Override
 	public boolean isLangSupported(Locale locale) {
@@ -514,56 +420,6 @@ public class SmsPlugin implements AsyncSmsPlugin, SmsPluginCapability, BundleAct
 		
 		exception.printStackTrace();		
 	}
-	
-	private void sendToServer(String strData, int retry)
-	{
-		System.out.println("strData =======> "+strData);
-		int rc;
-		Boolean result;
-		while(retry>0)
-		{
-			result = client.send(strData);
-			if(result)
-			{
-				rc = ZMQ.poll(items, POLL_TIMEOUT);			
-				if(rc ==0||rc ==-1)
-				{
-					//0 : no connect
-					//-1 : occur error
-	            	checkSmsException(ReasonCode.CONNECT_FAILED, "connect failed");	                					
-					break;
-				}
-				
-				if(items[0].isReadable())
-				{
-					// connect
-					String reply = client.recvStr();
-					
-					if(reply == null)
-						break;
-					
-					
-				}
-			}
-			
-		}
-		
-		
-		
-		
-		
-		
-		
-		try{
-			
-			
-		}catch (Exception e){
-			
-		}
-		
-	}
-	
+
 
 }
-
-
